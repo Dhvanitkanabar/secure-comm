@@ -1,0 +1,5 @@
+{
+  "name": "SecureComm Simulator",
+  "description": "An educational cybersecurity simulation demonstrating Client-Server communication, MITM attacks, TLS encryption, and Certificate validation.",
+  "requestFramePermissions": []
+}
