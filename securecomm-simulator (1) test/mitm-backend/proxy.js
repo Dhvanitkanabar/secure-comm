@@ -1,36 +1,51 @@
-const MITMProxy = require('http-mitm-proxy').Proxy; // Note the .Proxy at the end
-const proxy = new MITMProxy(); // Use 'new' to initialize the class
+const express = require('express');
+const cors = require('cors');
 const { Server } = require('socket.io');
+const http = require('http');
+const MITMProxy = require('http-mitm-proxy').Proxy;
 
-// WebSocket server on port 3001
-const io = new Server(3001, { 
-  cors: { origin: "*" } 
+const app = express();
+const server = http.createServer(app);
+
+// 1. WebSocket Setup
+const io = new Server(server, { 
+  cors: { 
+    // ✅ Replace with your actual Vercel URLs
+    origin: ["https://aura-app.vercel.app", "https://securecomm-simulator.vercel.app"],
+    methods: ["GET", "POST"]
+  } 
 });
 
-proxy.onError(function(ctx, err) {
-  console.error('Proxy Error:', err);
+app.use(cors({
+  origin: ["https://aura-app.vercel.app", "https://securecomm-simulator.vercel.app"]
+}));
+
+// 🛰️ Endpoint that Aura ChatBubble calls
+app.post('/capture', (req, res) => {
+  const data = req.body;
+  // Broadcasts the 'hello' message to the SecureComm Simulator
+  io.emit('new_data', { ...data, type: 'MITM_PACKET' });
+  res.status(200).send({ status: "captured" });
 });
 
-proxy.onRequest(function(ctx, callback) {
+// 4. MITM Engine Setup (from your proxy.js)
+const proxy = new MITMProxy();
+proxy.onError((ctx, err) => console.error('Proxy Error:', err));
+proxy.onRequest((ctx, callback) => {
   const req = ctx.clientToProxyRequest;
-  const host = req.headers.host;
-  const packetId = `REAL-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-
-  console.log(`Intercepted: ${host}${req.url}`);
-
   io.emit('request_intercepted', {
-    id: packetId,
+    id: `REAL-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
     method: req.method,
-    url: `https://${host}${req.url}`,
+    url: `https://${req.headers.host}${req.url}`,
     headers: req.headers,
     timestamp: new Date().toLocaleTimeString()
   });
-
   return callback();
 });
 
-proxy.listen({ port: 8080 }, function() {
-  console.log('--- MITM ENGINE ACTIVE ---');
-  console.log('Proxy Listening on Port: 8080');
-  console.log('WebSocket Server on Port: 3001');
+// 5. Port Listening
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => {
+  console.log(`Backend & WebSockets on Port: ${PORT}`);
+  // Port 8080 is local-only; in production Render uses the PORT variable above
 });
